@@ -1,4 +1,4 @@
-import { BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 
 export interface UsageBar {
   used: number;
@@ -49,8 +49,10 @@ export async function isAuthenticated(): Promise<boolean> {
     c.name === 'lastActiveOrg' ||
     (c.name.includes('session') && c.value.length > 20)
   );
-  console.log('Auth check - cookies found:', cookies.map(c => c.name).join(', '));
-  console.log('Auth check - has session:', hasSession);
+  if (!app.isPackaged) {
+    console.log('Auth check - cookies found:', cookies.map(c => c.name).join(', '));
+    console.log('Auth check - has session:', hasSession);
+  }
   return hasSession;
 }
 

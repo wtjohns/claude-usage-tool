@@ -84,7 +84,8 @@ function App() {
   }
 
   // Build header title - Claude "Plan" Plan Usage
-  const planName = claudeUsage?.plan || 'Max';
+  const VALID_PLANS = ['Max', 'Pro', 'Team', 'Enterprise', 'Free'];
+  const planName = VALID_PLANS.includes(claudeUsage?.plan ?? '') ? claudeUsage!.plan! : 'Max';
   const headerTitle = `Claude "${planName}" Plan Usage`;
 
   return (

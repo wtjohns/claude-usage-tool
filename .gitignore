@@ -7,7 +7,12 @@ dist-electron/
 release/
 
 # Environment files with secrets
-.env.local
+.env
+.env.*
+!.env.example
+
+# gstack security reports and local analytics
+.gstack/
 
 # IDE
 .vscode/

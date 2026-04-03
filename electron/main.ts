@@ -2,8 +2,8 @@ import { app, BrowserWindow, ipcMain, Tray, nativeImage, Menu, screen, dialog } 
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
+import { execSync } from 'child_process';
 import { scrapeClaudeUsage, scrapeBillingInfo, openLoginWindow, openPlatformLoginWindow, isAuthenticated } from './scraper';
-import { getUsageReport, getCostReport, getCreditBalance, ApiData } from './adminApi';
 
 // Disable default error dialogs in production
 if (app.isPackaged) {
@@ -80,6 +80,37 @@ function getRecentLogs(count: number = 6): LogEntry[] {
   return activityLogs.slice(-count);
 }
 
+async function getFiveHourUtilization(): Promise<string> {
+  try {
+    const keychainOutput = execSync(
+      'security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null',
+      { encoding: 'utf8' }
+    ).trim();
+
+    const credentials = JSON.parse(keychainOutput);
+    const token = credentials?.claudeAiOauth?.accessToken;
+    if (!token) return '–';
+
+    const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+        'User-Agent': 'claude-code/2.0.32',
+      },
+    });
+
+    if (!response.ok) return '–';
+
+    const data = await response.json() as { five_hour?: { utilization?: number } };
+    const utilization = data?.five_hour?.utilization;
+    if (utilization === undefined || utilization === null) return '–';
+
+    return `${Math.round(utilization * 100)}%`;
+  } catch {
+    return '–';
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 320,
@@ -113,36 +144,14 @@ function createWindow() {
 }
 
 function createTray() {
-  // Create a simple icon - in production, use a proper icon file
-  const iconPath = path.join(__dirname, '..', 'assets', 'trayIconTemplate.png');
-  let icon: Electron.NativeImage;
+  // Use a 1x1 fully-transparent image so only the tray title text is visible.
+  const transparentIcon = nativeImage.createFromBuffer(
+    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjkB6QAAAABJRU5ErkJggg==', 'base64')
+  );
 
-  try {
-    icon = nativeImage.createFromPath(iconPath);
-    if (icon.isEmpty()) {
-      // Fallback: create a simple 16x16 icon
-      icon = nativeImage.createEmpty();
-    }
-  } catch {
-    icon = nativeImage.createEmpty();
-  }
-
-  // If icon is empty, create a basic one programmatically
-  if (icon.isEmpty()) {
-    // Create a 16x16 basic icon
-    const size = 16;
-    const canvas = Buffer.alloc(size * size * 4);
-    for (let i = 0; i < size * size; i++) {
-      canvas[i * 4] = 100;     // R
-      canvas[i * 4 + 1] = 100; // G
-      canvas[i * 4 + 2] = 100; // B
-      canvas[i * 4 + 3] = 255; // A
-    }
-    icon = nativeImage.createFromBuffer(canvas, { width: size, height: size });
-  }
-
-  tray = new Tray(icon);
+  tray = new Tray(transparentIcon);
   tray.setToolTip('Claude Usage Tool');
+  tray.setTitle('–');
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Refresh', click: () => refreshAllData() },
@@ -300,66 +309,26 @@ async function refreshAllData() {
       timestamp: new Date().toISOString(),
       logs: getRecentLogs(6),
     });
+
+    // Use scraped bars for the tray title (5-hour "Current session" preferred).
+    // Fall back to OAuth API only if the scraper returned no usable bars.
+    addLog(`Bars returned: ${claudeUsage?.bars?.map(b => b.label).join(', ') || 'none'}`);
+    let utilizationText = '–';
+    if (claudeUsage?.isAuthenticated && claudeUsage.bars && claudeUsage.bars.length > 0) {
+      const currentSessionBar = claudeUsage.bars.find(
+        b => b.label?.toLowerCase().includes('current session') || b.label?.toLowerCase().includes('session')
+      ) ?? claudeUsage.bars[0];
+      utilizationText = `${Math.round(currentSessionBar.percentage)}%`;
+    } else {
+      utilizationText = await getFiveHourUtilization();
+    }
+    tray?.setTitle(utilizationText);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     addLog(`Refresh failed: ${message}`);
   }
 }
 
-async function getApiData(): Promise<ApiData | null> {
-  const adminKey = process.env.ANTHROPIC_ADMIN_KEY;
-  console.log('getApiData called, key exists:', !!adminKey);
-  console.log('Key starts with sk-ant-admin:', adminKey?.startsWith('sk-ant-admin'));
-  console.log('Key prefix:', adminKey?.substring(0, 20));
-
-  if (!adminKey) {
-    console.log('Admin key not configured');
-    return null;
-  }
-
-  // Accept both sk-ant-admin- and sk-ant-admin01- prefixes
-  if (!adminKey.startsWith('sk-ant-admin')) {
-    console.log('Invalid admin key format');
-    return null;
-  }
-
-  const now = new Date();
-  // Use a date from 30 days ago to now - using simple date strings
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const startDate = thirtyDaysAgo.toISOString().split('T')[0] + 'T00:00:00Z';
-  const endDateStr = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] + 'T00:00:00Z';
-
-  try {
-    console.log('Fetching API data from:', startDate, 'to:', endDateStr);
-
-    const [usageReport, costReport, creditBalance] = await Promise.all([
-      getUsageReport(adminKey, {
-        starting_at: startDate,
-        group_by: ['workspace_id', 'model'],
-        limit: 31,
-      }),
-      getCostReport(adminKey, {
-        starting_at: startDate,
-        group_by: ['workspace_id'],
-        limit: 31,
-      }),
-      getCreditBalance(adminKey).catch(err => {
-        console.log('Credit balance not available:', err.message);
-        return null;
-      }),
-    ]);
-
-    console.log('API data fetched successfully');
-    console.log('Usage buckets:', usageReport?.data?.length || 0);
-    console.log('Cost buckets:', costReport?.data?.length || 0);
-    console.log('Credit balance:', creditBalance?.available_credit || 'N/A');
-
-    return { usageReport, costReport, creditBalance };
-  } catch (error) {
-    console.error('Error fetching API data:', error);
-    throw error;
-  }
-}
 
 function startAutoRefresh() {
   // Refresh every 60 seconds
