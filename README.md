@@ -3,8 +3,14 @@
 A lightweight macOS menu bar application that displays your Claude Pro/Max subscription usage and API credit balance at a glance.
 
 ![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
-![Electron](https://img.shields.io/badge/electron-28.1.0-blue)
+![Electron](https://img.shields.io/badge/electron-41.1.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+> **Fork of [IgniteStudiosLtd/claude-usage-tool](https://github.com/IgniteStudiosLtd/claude-usage-tool)** with the following changes:
+>
+> - **Text-only menu bar** — shows your 5-hour session usage as a percentage (e.g. `62%`) directly in the menu bar with no icon, so your usage is visible at a glance without clicking anything
+> - **Electron 28 → 41** — upgrades the runtime, resolving 7 CVEs (including one HIGH severity use-after-free)
+> - **Security hardening** — removed credential fragments from logs, tightened `.gitignore`, validated scraped plan names against an allowlist, removed an unused production dependency
 
 <p align="center">
   <img src="Claude%20Usage%20Tool%201.png" alt="Claude Usage Tool Screenshot">
@@ -49,7 +55,7 @@ If you're a Claude power user, you've probably found yourself:
 
 ```bash
 # Clone the repository
-git clone https://github.com/kingigilbert/claude-usage-tool.git
+git clone https://github.com/wtjohns/claude-usage-tool.git
 cd claude-usage-tool
 
 # Install dependencies
@@ -169,7 +175,7 @@ Your session may have expired. Click the Login button to re-authenticate.
 
 ### App not appearing in menu bar
 
-The app runs as a menu bar app only (no dock icon). Look for the Claude icon in your system tray.
+The app runs as a menu bar app only (no dock icon). Look for the usage percentage (e.g. `62%`) in your menu bar.
 
 ## Contributing
 
