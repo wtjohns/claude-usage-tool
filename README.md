@@ -6,6 +6,8 @@ A lightweight macOS menu bar application that displays your Claude Pro/Max subsc
 ![Electron](https://img.shields.io/badge/electron-41.1.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+> **Looking for a native version?** This repo has been rewritten in Swift/SwiftUI as [wtjohns/ClaudeBar](https://github.com/wtjohns/ClaudeBar) — ~5MB vs ~300MB, no Electron.
+
 > **Fork of [IgniteStudiosLtd/claude-usage-tool](https://github.com/IgniteStudiosLtd/claude-usage-tool)** with the following changes:
 >
 > - **Text-only menu bar** — shows your 5-hour session usage as a percentage (e.g. `62%`) directly in the menu bar with no icon, so your usage is visible at a glance without clicking anything
